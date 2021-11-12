@@ -1,0 +1,63 @@
+---
+title: "working"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(broom)
+data = read.csv("data/stepsSleep.csv")
+```
+
+## R Markdown
+
+```{r}
+glimpse(data)
+```
+
+
+
+```{r}
+varNames = names(data)
+stepsObs <- tibble(Student.ID = integer(), date = character(), time = character(), steps = integer(), asleep = integer())
+for(j in 1:3100) {
+  for(i in 3:98) {
+    stepsObs <- stepsObs %>% 
+      add_row(Student.ID = data[j,1],
+              date = data[j,2],
+              time = varNames[i],
+              steps = data[j,i],
+              asleep = data[j,i+96])
+  }
+}
+```
+
+```{r}
+stepsObs2 <- stepsObs %>%
+  mutate(time = substr(time, 2,8)) %>%
+  mutate(time = as.numeric(time)) %>%
+  mutate(timeOfDay = case_when(
+    time < 8.0 ~ "earlyAM",
+    time >= 8.0 & time < 12.0 ~ "lateAM",
+    time >= 12.0 & time < 20.0 ~ "earlyPM",
+    time >= 20.0 ~ "latePM"
+  )) %>%
+  mutate(timeOfDay = as.factor(timeOfDay))
+```
+
+```{r}
+logit_mod <- glm(asleep ~ timeOfDay + steps, data = stepsObs2, family = binomial)
+tidy(logit_mod)
+summary(logit_mod)
+```
+
+```{r}
+log_odds <- augment(logit_mod, newdata = stepsObs2) %>%
+  mutate(odds = exp(.fitted)) %>%
+  mutate(pred_prob = odds / (1 + odds)) %>%
+  mutate(pred = case_when(
+    pred_prob <= 0.5 ~ 0,
+    pred_prob > 0.5 ~ 1
+  ))
+```
