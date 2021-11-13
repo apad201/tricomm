@@ -38,6 +38,7 @@ for(i in 3:98) {
 ```
 
 ```{r}
+stepsObsByTime <- read.csv("data/stepsObsByTime.csv")
 stepsObsByTime <- stepsObsByTime %>%
   mutate(time = substr(time, 2,8)) %>%
   mutate(time = as.numeric(time)) %>%
@@ -55,7 +56,11 @@ stepsObsByTime <- stepsObsByTime %>%
 ```
 
 ```{r}
-logit_mod <- glm(asleep ~ timeFrom2 + steps, data = stepsObs2, family = binomial)
+write.table(stepsObsByTime, file = "data/stepsObsByTime.csv", sep = ",")
+```
+
+```{r}
+logit_mod <- glm(asleep ~ steps, data = stepsObs2, family = binomial)
 tidy(logit_mod)
 summary(logit_mod)
 ```
@@ -80,10 +85,12 @@ stepsObsMN <- stepsObsByTime %>%
   group_by(Student.ID) %>%
   summarize(steps = mean(steps), asleep = getmode(asleep), timeOfDay = getmode(timeOfDay), time = getmode(time))
 
+stepsObsMNTraining <- stepsObsMN %>%
+  filter(Student.ID < 81)
 ```
 
 ```{r}
-mn_model <- glm(asleep ~ steps, data = stepsObsMN, family = binomial)
+mn_model <- glm(asleep ~ steps, data = stepsObsMNTraining, family = binomial)
 tidy(mn_model)
 summary(mn_model)
 stepsObsMNPred <- augment(mn_model, newdata = stepsObsMN) %>%
@@ -93,4 +100,30 @@ stepsObsMNPred <- augment(mn_model, newdata = stepsObsMN) %>%
     pred_prob <= 0.5 ~ 0,
     pred_prob > 0.5 ~ 1
   ))
+```
+
+```{r}
+makeModel <- function(i) {
+  stepsObsTraining <- stepsObsByTime %>%
+    filter(time - (floor(i/4) + (i%%4)*0.15) < 0.03) %>%
+    filter(Student.ID < 81) %>%
+    group_by(Student.ID) %>%
+    summarize(steps = mean(steps), asleep = getmode(asleep), timeOfDay = getmode(timeOfDay), time = getmode(time))
+  return(stepsObsTraining)
+}
+
+
+trainingDataList = list()
+for(i in 0:95) {
+  trainingDataList[[i+1]] <- makeModel(i)
+}
+
+models = list()
+models[[1]] <- glm(asleep ~ steps, data = trainingDataList[[1]], family = binomial)
+
+for(i in 1:95) {
+  models[[i+1]] <- glm(asleep ~ steps, data = trainingDataList[[i+1]], family = binomial)
+}
+
+
 ```
