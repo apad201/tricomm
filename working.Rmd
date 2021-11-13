@@ -168,12 +168,16 @@ for(i in 0:95) {
 
 modelPredictionsRaw <- list()
 for(i in 0:95) {
+  cutoff <- dataListRaw[[i+1]] %>%
+    summarize(mean = mean(asleep)) %>%
+    pull(mean)
+  
   modelPredictionsRaw[[i+1]] <- augment(models[[i+1]], newdata = dataListRaw[[i+1]]) %>%
     mutate(odds = exp(.fitted)) %>%
     mutate(pred_prob = odds / (1 + odds)) %>%
     mutate(pred = case_when(
-      pred_prob <= 0.5 ~ 0,
-      pred_prob > 0.5 ~ 1
+      pred_prob <= quantile(pred_prob, 1-cutoff) ~ 0,
+      pred_prob > quantile(pred_prob, 1-cutoff) ~ 1
     ))
 }
 ```
