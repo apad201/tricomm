@@ -102,10 +102,10 @@ stepsObsMNPred <- augment(mn_model, newdata = stepsObsMN) %>%
   ))
 ```
 
-```{r}
+```{r echo=FALSE}
 makeModel <- function(i) {
   stepsObsTraining <- stepsObsByTime %>%
-    filter(time - (floor(i/4) + (i%%4)*0.15) < 0.03) %>%
+    filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03) %>%
     filter(Student.ID < 81) %>%
     group_by(Student.ID) %>%
     summarize(steps = mean(steps), asleep = getmode(asleep), timeOfDay = getmode(timeOfDay), time = getmode(time))
@@ -126,4 +126,98 @@ for(i in 1:95) {
 }
 
 
+```
+
+```{r}
+modelParams <- tibble(time = numeric(), intercept = numeric(), steps = numeric())
+for(i in 0:95) {
+  modelParams <- modelParams %>%
+    add_row(time = i,
+            intercept = tidy(models[[i+1]]) %>% filter(term == "(Intercept)") %>% pull(estimate),
+            steps = tidy(models[[i+1]]) %>% filter(term == "steps") %>% pull(estimate)
+            )
+}
+```
+
+
+```{r}
+dataList = list()
+for(i in 0:95) {
+  dataList[[i+1]] <- stepsObsByTime %>%
+    filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03) %>%
+    group_by(Student.ID) %>%
+    summarize(steps = mean(steps), asleep = getmode(asleep), timeOfDay = getmode(timeOfDay), time = getmode(time))
+}
+
+
+modelPredictions <- list()
+for(i in 0:95) {
+  modelPredictions[[i+1]] <- augment(models[[i+1]], newdata = dataList[[i+1]]) %>%
+    mutate(odds = exp(.fitted)) %>%
+    mutate(pred_prob = odds / (1 + odds)) %>%
+    mutate(pred = case_when(
+      pred_prob <= 0.5 ~ 0,
+      pred_prob > 0.5 ~ 1
+    ))
+}
+
+dataListRaw <- list()
+for(i in 0:95) {
+  dataListRaw[[i+1]] <- stepsObsByTime %>%
+    filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03) %>%
+    filter(Student.ID > 80)
+}
+
+modelPredictionsRaw <- list()
+for(i in 0:95) {
+  modelPredictionsRaw[[i+1]] <- augment(models[[i+1]], newdata = dataListRaw[[i+1]]) %>%
+    mutate(odds = exp(.fitted)) %>%
+    mutate(pred_prob = odds / (1 + odds)) %>%
+    mutate(pred = case_when(
+      pred_prob <= 0.5 ~ 0,
+      pred_prob > 0.5 ~ 1
+    ))
+}
+```
+
+```{r}
+modelAccuracy <- list()
+
+for(i in 0:95) {
+  modelAccuracy[[i+1]] <- modelPredictionsRaw[[i+1]] %>%
+    mutate(correct = abs(pred - asleep)) %>%
+    summarize(percent = 1-mean(correct)) %>%
+    pull(percent)
+}
+
+modelAccuracyV <- unlist(modelAccuracy)
+```
+
+```{r}
+ggplot(modelParams) +
+  geom_point(aes(x=time, y=intercept))
+
+ggplot(modelParams) +
+  geom_point(aes(x=time, y=steps)) +
+  geom_point(aes(x=time,y=modelAccuracyV)) +
+  ylim(-1,1)
+```
+
+
+```{r}
+stepsObsTraining <- stepsObsByTime %>% 
+  filter(Student.ID < 81)
+dumbModel <- glm(asleep ~ steps, data = stepsObsTraining, family = binomial)
+
+dumbModelAccuracy <- augment(dumbModel, newdata = stepsObsByTime) %>%
+  mutate(odds = exp(.fitted)) %>%
+  mutate(pred_prob = odds / (1 + odds)) %>%
+  mutate(pred = case_when(
+    pred_prob <= 0.5 ~ 0,
+    pred_prob > 0.5 ~ 1
+  )) %>%
+  mutate(correct = abs(asleep - pred)) %>%
+  summarize(percent = 1-mean(correct)) %>%
+  pull(percent)
+  
 ```
