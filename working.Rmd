@@ -176,8 +176,8 @@ for(i in 0:95) {
     mutate(odds = exp(.fitted)) %>%
     mutate(pred_prob = odds / (1 + odds)) %>%
     mutate(pred = case_when(
-      pred_prob <= quantile(pred_prob, 1-cutoff) ~ 0,
-      pred_prob > quantile(pred_prob, 1-cutoff) ~ 1
+      .fitted <= quantile(.fitted, 1-cutoff) ~ 0,
+      .fitted > quantile(.fitted, 1-cutoff) ~ 1
     ))
 }
 ```
