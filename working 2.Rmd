@@ -12,3 +12,76 @@ view(stepsObsByTime)
 ```
 
 
+```{r}
+
+stepsObsByTimeSep <- stepsObsByTime %>%
+  group_by(Student.ID, time, asleep) %>% 
+  summarize(steps = mean(steps), n = n())
+
+sepTrainingDataList <- list()
+for(i in 0:95) {
+  sepTrainingDataList[[i+1]] <- stepsObsByTimeSep %>%
+    filter(Student.ID < 80) %>%
+    filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03)
+}
+
+sepModels <- list()
+for(i in 0:95) {
+  sepModels[[i+1]] <- glm(asleep ~ steps, data = sepTrainingDataList[[i+1]], family=binomial, weights = 1/n)
+}
+```
+
+```{r}
+sepDataListRaw <- list()
+for(i in 0:95) {
+  sepDataListRaw[[i+1]] <- stepsObsByTime %>%
+    filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03) %>%
+    filter(Student.ID >= 80)
+}
+
+sepModelPredictionsRaw <- list()
+for(i in 0:95) {
+  sepModelPredictionsRaw[[i+1]] <- augment(sepModels[[i+1]], newdata = sepDataListRaw[[i+1]]) %>%
+    mutate(odds = exp(.fitted)) %>%
+    mutate(pred_prob = odds / (1 + odds)) %>%
+    mutate(pred = case_when(
+      pred_prob <= 0.5 ~ 0,
+      pred_prob > 0.5 ~ 1
+    ))
+}
+
+sepModelAccuracy <- list()
+
+for(i in 0:95) {
+  sepModelAccuracy[[i+1]] <- sepModelPredictionsRaw[[i+1]] %>%
+    mutate(correct = abs(pred - asleep)) %>%
+    summarize(percent = 1-mean(correct)) %>%
+    pull(percent)
+}
+
+sepModelAccuracyV <- unlist(sepModelAccuracy)
+```
+
+
+```{r}
+counter = 0
+for(id in 0:99) {
+  for(date in 1:31) {
+    for(t in 0:95) {
+      if(date == 1 & (floor(t/4) + (t%%4)*0.15) < 0.3) {
+        next
+      }
+      if(date == 31 & (floor(t/4) + (t%%4)*0.15) > 23.15) {
+        next
+      }
+      if(stepsObsByTime[[2976*id + 96*(date-1) + t -1,5]] == stepsObsByTime[[2976*id + 96*(date-1) + t,5]] &
+         stepsObsByTime[[2976*id + 96*(date-1) + t + 2,5]] == stepsObsByTime[[2976*id + 96*(date-1) + t + 3,5]] &
+         stepsObsByTime[[2976*id + 96*(date-1) + t,5]] == stepsObsByTime[[2976*id + 96*(date-1) + t + 2,5]] &
+         stepsObsByTime[[2976*id + 96*(date-1) + t,5]] != stepsObsByTime[[2976*id + 96*(date-1) + t + 1,5]]) {
+        stepsObsByTime[[2976*id + 96*(date-1) + t + 1,5]] <- stepsObsByTime[[2976*id + 96*(date-1) + t,5]]
+        counter <- counter + 1
+         }
+    }
+  }
+}
+```

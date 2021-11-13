@@ -52,11 +52,9 @@ stepsObsByTime <- stepsObsByTime %>%
   mutate(timeFrom2 = case_when(
     abs(time - 2) < abs(time - 26) ~ abs(time - 2),
     abs(time - 2) >= abs(time - 26) ~ abs(time - 26)
-  ))
-```
-
-```{r}
-write.table(stepsObsByTime, file = "data/stepsObsByTime.csv", sep = ",")
+  )) %>%
+  mutate(date = substr(date, 9,10)) %>%
+  mutate(date = as.integer(date))
 ```
 
 ```{r}
@@ -106,7 +104,7 @@ stepsObsMNPred <- augment(mn_model, newdata = stepsObsMN) %>%
 makeModel <- function(i) {
   stepsObsTraining <- stepsObsByTime %>%
     filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03) %>%
-    filter(Student.ID < 81) %>%
+    filter(Student.ID < 80) %>%
     group_by(Student.ID) %>%
     summarize(steps = mean(steps), asleep = getmode(asleep), timeOfDay = getmode(timeOfDay), time = getmode(time))
   return(stepsObsTraining)
@@ -165,7 +163,7 @@ dataListRaw <- list()
 for(i in 0:95) {
   dataListRaw[[i+1]] <- stepsObsByTime %>%
     filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03) %>%
-    filter(Student.ID > 80)
+    filter(Student.ID >= 80)
 }
 
 modelPredictionsRaw <- list()
