@@ -64,6 +64,9 @@ sepModelAccuracyV <- unlist(sepModelAccuracy)
 
 
 ```{r}
+stepsObsByTime <- stepsObsByTime %>%
+  arrange(Student.ID, date, time)
+
 counter = 0
 for(id in 0:99) {
   for(date in 1:31) {
