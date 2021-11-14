@@ -127,6 +127,7 @@ for(i in 1:95) {
 ```
 
 ```{r}
+
 modelParams <- tibble(time = numeric(), intercept = numeric(), steps = numeric())
 for(i in 0:95) {
   modelParams <- modelParams %>%
@@ -176,8 +177,10 @@ for(i in 0:95) {
     mutate(odds = exp(.fitted)) %>%
     mutate(pred_prob = odds / (1 + odds)) %>%
     mutate(pred = case_when(
-      .fitted <= quantile(.fitted, 1-cutoff) ~ 0,
-      .fitted > quantile(.fitted, 1-cutoff) ~ 1
+      #.fitted <= quantile(.fitted, 1-cutoff) ~ 0,
+      #.fitted > quantile(.fitted, 1-cutoff) ~ 1
+      pred_prob <= 0.5 ~ 0,
+      pred_prob > 0.5 ~ 1
     ))
 }
 ```
@@ -278,4 +281,31 @@ dumbModelAccuracy <- augment(dumbModel, newdata = stepsObsByTime) %>%
   summarize(percent = 1-mean(correct)) %>%
   pull(percent)
   
+```
+
+
+```{r}
+stepsDataPredSmall <- read.csv("data/stepsDataPredSmall.csv")
+stepsDataPredSmall <- stepsDataPredSmall %>%
+  mutate(time = substr(time, 2,8)) %>%
+  mutate(time = as.numeric(time)) %>%
+  mutate(timeOfDay = case_when(
+    time < 8.0 ~ "earlyAM",
+    time >= 8.0 & time < 12.0 ~ "lateAM",
+    time >= 12.0 & time < 20.0 ~ "earlyPM",
+    time >= 20.0 ~ "latePM"
+  )) %>%
+  mutate(timeOfDay = as.factor(timeOfDay)) %>%
+  mutate(timeFrom2 = case_when(
+    abs(time - 2) < abs(time - 26) ~ abs(time - 2),
+    abs(time - 2) >= abs(time - 26) ~ abs(time - 26)
+  )) %>%
+  mutate(date = substr(date, 9,10)) %>%
+  mutate(date = as.integer(date))
+
+```
+
+```{r}
+stepsDataPredSmallList <- 
+
 ```
