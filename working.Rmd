@@ -220,6 +220,31 @@ for(id in 80:99) {
   }
 }
 
+
+modelPredictionsRawMerged <- modelPredictionsRawMerged %>%
+  mutate(predSmT = predSm)
+for(id in 80:99) {
+  print(id)
+  for(date in 1:31) {
+    flag = FALSE
+    for(t in 0:95) {
+      if(!flag & t >= 17 & t < 71) {
+        if(modelPredictionsRawMerged[[2976*(id-80) + 96*(date-1) + t + 1, 12]] == 0) {
+          flag = TRUE
+        }
+      }
+      if(t >= 71) {
+        flag = FALSE
+      }
+      if(flag) {
+        modelPredictionsRawMerged[[2976*(id-80) + 96*(date-1) + t + 1, 13]] <- 0
+      }
+    }
+  }
+}
+
+
+
 modelPredictionsRawSm <- list()
 for(i in 0:95) {
   modelPredictionsRawSm[[i+1]] <- modelPredictionsRawMerged %>%
@@ -258,10 +283,25 @@ ggplot(modelParams) +
   geom_point(aes(x=time, y=intercept))
 
 ggplot(modelParams) +
-  geom_point(aes(x=time, y=steps)) +
-  geom_point(aes(x=time,y=modelAccuracySmV), color = "blue") +
-  geom_point(aes(x=time, y=modelAccuracyV), color = "red") +
-  ylim(-1,1)
+  geom_point(aes(x=time, y=modelAccuracyV, color = "Unsmoothed")) +
+  geom_point(aes(x=time,y=modelAccuracySmV, color = "Smoothed")) +
+  ylim(0,1) +
+  labs(title = "Smoothed vs. Unsmoothed Model Performance",
+       x = "Time (15-minute increments since midnight)",
+       y = "Prediction accuracy"
+  ) +
+  scale_color_manual(name = "Model",
+                     breaks = c("Unsmoothed", "Smoothed"),
+                     values = c("Unsmoothed" = "red", "Smoothed" = "blue"))
+
+
+modelPredictionsRawMerged %>% group_by(Student.ID, date) %>% summarize(predicted = sum(predSmT)/4, actual = sum(asleep)/4, diff = predicted - actual) %>% group_by()  %>%
+  ggplot() +
+  geom_density(aes(x=diff)) +
+  labs(title = "Difference between Predicted and Actual Sleep",
+       subtitle = "Given as Predicted - Actual",
+       x = "Difference (Hours per day)",
+       y = "Density")
 ```
 
 
@@ -286,26 +326,172 @@ dumbModelAccuracy <- augment(dumbModel, newdata = stepsObsByTime) %>%
 
 ```{r}
 stepsDataPredSmall <- read.csv("data/stepsDataPredSmall.csv")
-stepsDataPredSmall <- stepsDataPredSmall %>%
-  mutate(time = substr(time, 2,8)) %>%
-  mutate(time = as.numeric(time)) %>%
-  mutate(timeOfDay = case_when(
-    time < 8.0 ~ "earlyAM",
-    time >= 8.0 & time < 12.0 ~ "lateAM",
-    time >= 12.0 & time < 20.0 ~ "earlyPM",
-    time >= 20.0 ~ "latePM"
-  )) %>%
-  mutate(timeOfDay = as.factor(timeOfDay)) %>%
-  mutate(timeFrom2 = case_when(
-    abs(time - 2) < abs(time - 26) ~ abs(time - 2),
-    abs(time - 2) >= abs(time - 26) ~ abs(time - 26)
-  )) %>%
-  mutate(date = substr(date, 9,10)) %>%
-  mutate(date = as.integer(date))
 
 ```
 
 ```{r}
-stepsDataPredSmallList <- 
+stepsDataPred <- union_all(stepsDataPredSmall, stepsDataPredSmall2)
+stepsDataPred <- union_all(stepsDataPred, stepsDataPredSmall3)
+stepsDataPred <- union_all(stepsDataPred, stepsDataPredSmall4)
+
+stepsDataPred <- stepsDataPred %>%
+  mutate(time = substr(time, 2,8)) %>%
+  mutate(time = as.numeric(time)) %>%
+  mutate(date = substr(date, 9,10)) %>%
+  mutate(date = as.integer(date))
+
+stepsDataPred <- stepsDataPred %>%
+  mutate(steps = case_when(
+    steps == 2500L ~ 0L,
+    steps != 2500L ~ steps
+  ))
+```
+
+```{r}
+stepsPredList <- list()
+for(i in 0:95) {
+  stepsPredList[[i+1]] <- stepsDataPred %>%
+    filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03)
+}
+
+for(i in 0:95) {
+  stepsPredList[[i+1]] <- augment(models[[i+1]], newdata = stepsPredList[[i+1]]) %>%
+    mutate(odds = exp(.fitted)) %>%
+    mutate(pred_prob = odds / (1 + odds)) %>%
+    mutate(pred = case_when(
+      pred_prob <= 0.5 ~ 0,
+      pred_prob > 0.5 ~ 1
+    ))
+}
+
+
+stepsPredMerged <- union_all(stepsPredList[[1]], stepsPredList[[2]])
+for(t in 3:96) {
+  stepsPredMerged <- union_all(stepsPredMerged, stepsPredList[[t]])
+}
+
+stepsPredMerged <- stepsPredMerged %>%
+  arrange(Student.ID, date, time) %>%
+  mutate(predSm = pred)
+
+counterPred = 0
+for(id in 100:499) {
+  for(date in 1:31) {
+    for(t in 0:95) {
+      if(date == 1 & (floor(t/4) + (t%%4)*0.15) < 0.3) {
+        next
+      }
+      if(date == 31 & (floor(t/4) + (t%%4)*0.15) > 23.15) {
+        next
+      }
+      if((t/4 >= 23 | t/4 <= 6.5) & stepsPredMerged[[2976*(id-100) + 96*(date-1) + t,8]] == 1 & stepsPredMerged[[2976*(id-100) + 96*(date-1) + t + 2,8]] == 1 &
+         stepsPredMerged[[2976*(id-100) + 96*(date-1) + t + 1,8]] == 0) {
+        stepsPredMerged[[2976*(id-100) + 96*(date-1) + t + 1,9]] <- 1
+        counterPred <- counterPred + 1
+      }
+      if((t/4 < 23 & t/4 > 6.5) & stepsPredMerged[[2976*(id-100) + 96*(date-1) + t,8]] == 0 & stepsPredMerged[[2976*(id-100) + 96*(date-1) + t + 2,8]] == 0 &
+         stepsPredMerged[[2976*(id-100) + 96*(date-1) + t + 1,8]] == 1) {
+        stepsPredMerged[[2976*(id-100) + 96*(date-1) + t + 1,9]] <- 0
+        counterPred <- counterPred + 1
+         }
+    }
+  }
+}
+
+stepsPredListSm <- list()
+for(i in 0:95) {
+  stepsPredListSm[[i+1]] <- stepsPredMerged %>%
+    filter(abs(time - (floor(i/4) + (i%%4)*0.15)) < 0.03)
+}
+
+```
+
+
+```{r}
+
+stepsPredSmDaily <- stepsPredMerged %>%
+  group_by(Student.ID, date) %>%
+  summarize(totalSteps = sum(steps), sleep = sum(predSm)/4)
+
+
+stepsPredMerged <- stepsPredMerged %>%
+  mutate(predSmT = predSm)
+for(id in 100:150) {
+  print(id)
+  for(date in 1:31) {
+    flag = FALSE
+    for(t in 0:95) {
+      if(!flag & t >= 17 & t < 71) {
+        if(stepsPredMerged[[2976*(id-100) + 96*(date-1) + t + 1, 9]] == 0) {
+          flag = TRUE
+        }
+      }
+      if(t >= 71) {
+        flag = FALSE
+      }
+      if(flag) {
+        stepsPredMerged[[2976*(id-100) + 96*(date-1) + t + 1, 10]] <- 0
+      }
+    }
+  }
+}
+
+stepsSleepCor <- stepsPredMerged %>% filter(Student.ID < 151) %>%
+  group_by(Student.ID, date) %>%
+  summarize(sleep = sum(predSmT)/4, totalSteps = sum(steps))
+
+stepsSleepCorTrain <- modelPredictionsRawMerged %>% 
+  group_by(Student.ID, date) %>%
+  summarize(sleep = sum(predSmT)/4, totalSteps = sum(steps))
+
+stepsSleepCorMerged <- union_all(stepsSleepCor, stepsSleepCorTrain)
+
+
+stepsSleepCorMerged <- stepsSleepCorMerged %>%
+  mutate(dayOfWeek = case_when(
+    date %% 7 == 1 ~ "Friday",
+    date %% 7 == 2 ~ "Saturday",
+    date %% 7 == 3 ~ "Sunday",
+    date %% 7 == 4 ~ "Monday",
+    date %% 7 == 5 ~ "Tuesday",
+    date %% 7 == 6 ~ "Wednesday",
+    date %% 7 == 0 ~ "Thursday"
+  )) %>%
+  mutate(weekend = case_when(
+    date %% 7 == 1 ~ FALSE,
+    date %% 7 == 2 ~ TRUE,
+    date %% 7 == 3 ~ TRUE,
+    date %% 7 == 4 ~ FALSE,
+    date %% 7 == 5 ~ FALSE,
+    date %% 7 == 6 ~ FALSE,
+    date %% 7 == 0 ~ FALSE
+  ))
+
+weekends <- stepsSleepCorMerged %>%
+  group_by() %>%
+  filter(weekend==TRUE) %>%
+  select(sleep)
+
+weekdays <- stepsSleepCorMerged %>%
+  group_by() %>%
+  filter(weekend==FALSE) %>%
+  select(sleep)
+
+t.test(weekends$sleep, weekdays$sleep, mu = 0, alternative = "two.sided")
+
+ggplot(data = stepsSleepCorMerged) +
+  geom_boxplot(aes(x=dayOfWeek,y=sleep)) +
+  xlim(c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")) +
+  labs(title = "Sleep vs. Day of Week",
+       x = "Day of Week",
+       y = "Sleep (hrs)")
+
+ggplot(data = stepsSleepCorMerged) +
+  geom_jitter(aes(x=totalSteps, y= sleep)) +
+  labs(title = "Sleep vs. Steps",
+       subtitle = "(Each data point is one person on one day)",
+       x = "Steps",
+       y = "Sleep (hrs)")
+
 
 ```
